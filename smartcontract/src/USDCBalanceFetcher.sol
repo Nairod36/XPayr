@@ -16,6 +16,7 @@ contract USDCBalanceFetcher {
     struct BalanceData {
         uint256 balance;
         uint256 minThreshold;
+        uint256 usdcAmount; // Metadata for USDC amount
     }
 
     constructor(address _usdcAddress) {
@@ -26,13 +27,14 @@ contract USDCBalanceFetcher {
     /// @param _wallet Adresse du wallet à vérifier
     /// @param _minThreshold Seuil minimum pour ce wallet sur cette chaîne
     /// @return balanceData Structure contenant balance et minThreshold
-    function fetchUSDCBalanceWithThreshold(address _wallet, uint256 _minThreshold) external view returns (BalanceData memory balanceData) {
+    function fetchUSDCBalanceWithThreshold(address _wallet, uint256 _minThreshold, uint256 _usdcAmount) external view returns (BalanceData memory balanceData) {
         IERC20 usdc = IERC20(USDC_ADDRESS);
         uint256 balance = usdc.balanceOf(_wallet);
         
         balanceData = BalanceData({
             balance: balance,
-            minThreshold: _minThreshold
+            minThreshold: _minThreshold,
+            usdcAmount: _usdcAmount // Include the USDC amount as metadata
         });
         
         return balanceData;

@@ -135,18 +135,20 @@ contract DeployAnalyzer is Script {
         console.log("Fetcher Mappings:");
         for (uint i = 0; i < chains.length; i++) {
             address mappedFetcher = analyzer.fetcherByChain(chains[i].lzEid);
-            console.log("  ", chains[i].name, "(EID", chains[i].lzEid, "):", mappedFetcher);
+            console.log("  Chain:", chains[i].name);
+            console.log("    EID:", chains[i].lzEid);
+            console.log("    Fetcher:", mappedFetcher);
             
             if (mappedFetcher == chains[i].fetcherAddress) {
-                console.log("    ✅ Correct mapping");
+                console.log("    Status: Correct mapping");
             } else {
-                console.log("    ❌ Mapping mismatch!");
+                console.log("    Status: Mapping mismatch!");
                 console.log("    Expected:", chains[i].fetcherAddress);
                 console.log("    Got:", mappedFetcher);
             }
         }
         
-        console.log("✅ Analyzer configuration verified");
+        console.log("Analyzer configuration verified");
     }
 
     /**
@@ -178,6 +180,16 @@ contract DeployAnalyzer is Script {
  */
 contract TestAnalyzerIntegration is Script {
     
+    /**
+     * @notice Crée les options LayerZero appropriées pour les requêtes cross-chain
+     * @return extraOptions Options encodées pour LayerZero V2
+     */
+    function createLayerZeroOptions() internal pure returns (bytes memory extraOptions) {
+        // Pour lzRead, les options vides sont souvent suffisantes
+        // Le problème peut venir d'ailleurs (configuration DVN, peers, etc.)
+        return abi.encodePacked(uint16(3));
+    }
+    
     function run() external {
         require(block.chainid == 11155111, "Integration tests must run on Sepolia");
         
@@ -201,15 +213,27 @@ contract TestAnalyzerIntegration is Script {
         minThresholds[0] = vm.envUint("MIN_THRESHOLD_SEPOLIA");
         minThresholds[1] = vm.envUint("MIN_THRESHOLD_FUJI");
         
+        // Montant USDC à distribuer (depuis .env ou valeur par défaut)
+        uint256 usdcAmount;
+        try vm.envUint("TEST_USDC_AMOUNT") returns (uint256 amount) {
+            usdcAmount = amount;
+        } catch {
+            usdcAmount = 1000 * 10**6; // 1000 USDC par défaut
+        }
+        
         console.log("Test Configuration:");
         console.log("  Sepolia wallet:", merchantWallets[0], "threshold:", minThresholds[0]);
         console.log("  Fuji wallet:", merchantWallets[1], "threshold:", minThresholds[1]);
+        console.log("  USDC amount to distribute:", usdcAmount);
         
         // Estimation des frais
         uint256 estimatedFee = 0.02 ether; // Estimation conservatrice
         console.log("Estimated fee:", estimatedFee);
         
         require(address(this).balance >= estimatedFee, "Insufficient ETH for LayerZero fees");
+        
+        // Création des options LayerZero appropriées
+        bytes memory extraOptions = createLayerZeroOptions();
         
         vm.startBroadcast();
         
@@ -219,9 +243,10 @@ contract TestAnalyzerIntegration is Script {
             merchantWallets,
             targetEids,
             minThresholds,
-            ""
+            usdcAmount,
+            extraOptions
         ) returns (MessagingReceipt memory receipt) {
-            console.log("✅ Cross-chain analysis initiated successfully!");
+            console.log("Cross-chain analysis initiated successfully!");
             console.log("Receipt GUID:", vm.toString(receipt.guid));
             console.log("Receipt Nonce:", receipt.nonce);
             console.log("Fee paid:", receipt.fee.nativeFee);
@@ -234,7 +259,7 @@ contract TestAnalyzerIntegration is Script {
             console.log("4. Event topic: DispatchRecommendation(uint256[])");
             
         } catch Error(string memory reason) {
-            console.log("❌ Analysis failed:", reason);
+            console.log("Analysis failed:", reason);
             console.log("Possible causes:");
             console.log("- Insufficient ETH for fees");
             console.log("- LayerZero endpoint issues");
@@ -279,9 +304,9 @@ contract AnalyzerUtilities is Script {
         address analyzer = vm.envAddress("ANALYZER_SEPOLIA_ADDRESS");
         
         console.log("Deployment Status:");
-        console.log("- Sepolia fetcher:", sepoliaFetcher != address(0) ? "✅ Deployed" : "❌ Missing");
-        console.log("- Fuji fetcher:", fujiFetcher != address(0) ? "✅ Deployed" : "❌ Missing");
-        console.log("- Analyzer:", analyzer != address(0) ? "✅ Deployed" : "❌ Missing");
+        console.log("- Sepolia fetcher:", sepoliaFetcher != address(0) ? "Deployed" : "Missing");
+        console.log("- Fuji fetcher:", fujiFetcher != address(0) ? "Deployed" : "Missing");
+        console.log("- Analyzer:", analyzer != address(0) ? "Deployed" : "Missing");
         
         if (analyzer != address(0)) {
             GenericUSDCAnalyzer analyzerContract = GenericUSDCAnalyzer(analyzer);
@@ -303,16 +328,16 @@ contract AnalyzerUtilities is Script {
             bool fujiOK = mappedFuji == fujiFetcher;
             
             console.log("Mapping Verification:");
-            console.log("- Sepolia:", sepoliaOK ? "✅ Correct" : "❌ Incorrect");
-            console.log("- Fuji:", fujiOK ? "✅ Correct" : "❌ Incorrect");
+            console.log("- Sepolia:", sepoliaOK ? "Correct" : "Incorrect");
+            console.log("- Fuji:", fujiOK ? "Correct" : "Incorrect");
             
             if (sepoliaOK && fujiOK) {
                 console.log("");
-                console.log("🎉 Complete setup verified!");
+                console.log("Complete setup verified!");
                 console.log("Ready for cross-chain testing");
             } else {
                 console.log("");
-                console.log("❌ Configuration issues detected");
+                console.log("Configuration issues detected");
                 console.log("Please redeploy the analyzer with correct fetcher addresses");
             }
         }
@@ -353,6 +378,6 @@ contract AnalyzerUtilities is Script {
         console.log("- LayerZero oracle fees");
         console.log("- Message size (our messages are small)");
         console.log("");
-        console.log("💡 Use 0.02 ETH for testing, adjust based on actual usage");
+        console.log("Use 0.02 ETH for testing, adjust based on actual usage");
     }
 }

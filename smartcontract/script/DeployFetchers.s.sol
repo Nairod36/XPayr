@@ -115,9 +115,9 @@ contract DeployFetchers is Script {
         console.log("Expected USDC:", config.usdcAddress);
         
         if (configuredUSDC == config.usdcAddress) {
-            console.log("✅ USDC configuration correct");
+            console.log("USDC configuration correct");
         } else {
-            console.log("❌ USDC configuration mismatch");
+            console.log("USDC configuration mismatch");
         }
 
         // Test avec un wallet de test
@@ -130,16 +130,18 @@ contract DeployFetchers is Script {
                 
                 // Test avec threshold
                 uint256 testThreshold = getTestThreshold(chainName);
-                try fetcher.fetchUSDCBalanceWithThreshold(testWallet, testThreshold) returns (USDCBalanceFetcher.BalanceData memory data) {
+                uint256 testUsdcAmount = getTestUsdcAmount();
+                try fetcher.fetchUSDCBalanceWithThreshold(testWallet, testThreshold, testUsdcAmount) returns (USDCBalanceFetcher.BalanceData memory data) {
                     console.log("Balance with threshold:");
                     console.log("  - Balance:", data.balance);
                     console.log("  - Threshold:", data.minThreshold);
-                    console.log("✅ All fetcher functions working");
+                    console.log("  - USDC Amount:", data.usdcAmount);
+                    console.log("All fetcher functions working");
                 } catch {
-                    console.log("❌ fetchUSDCBalanceWithThreshold failed");
+                    console.log("fetchUSDCBalanceWithThreshold failed");
                 }
             } catch {
-                console.log("❌ fetchUSDCBalance failed - check USDC contract");
+                console.log("fetchUSDCBalance failed - check USDC contract");
             }
         }
     }
@@ -154,14 +156,14 @@ contract DeployFetchers is Script {
             try vm.envAddress("SEPOLIA_TEST_WALLET") returns (address wallet) {
                 return wallet;
             } catch {
-                console.log("⚠️  SEPOLIA_TEST_WALLET not configured");
+                console.log("SEPOLIA_TEST_WALLET not configured");
                 return address(0);
             }
         } else if (keccak256(bytes(chainName)) == keccak256(bytes("fuji"))) {
             try vm.envAddress("FUJI_TEST_WALLET") returns (address wallet) {
                 return wallet;
             } catch {
-                console.log("⚠️  FUJI_TEST_WALLET not configured");
+                console.log("FUJI_TEST_WALLET not configured");
                 return address(0);
             }
         }
@@ -188,6 +190,18 @@ contract DeployFetchers is Script {
             }
         }
         return 100 * 10**6;
+    }
+
+    /**
+     * @notice Récupère le montant USDC de test
+     * @return usdcAmount Montant USDC pour les tests
+     */
+    function getTestUsdcAmount() internal view returns (uint256 usdcAmount) {
+        try vm.envUint("TEST_USDC_AMOUNT") returns (uint256 amount) {
+            return amount;
+        } catch {
+            return 1000 * 10**6; // 1000 USDC par défaut
+        }
     }
 
     /**
@@ -224,6 +238,18 @@ contract DeployFetchers is Script {
  * @notice Script pour tester un fetcher déjà déployé
  */
 contract TestFetcher is Script {
+    
+    /**
+     * @notice Récupère le montant USDC de test
+     * @return usdcAmount Montant USDC pour les tests
+     */
+    function getTestUsdcAmount() internal view returns (uint256 usdcAmount) {
+        try vm.envUint("TEST_USDC_AMOUNT") returns (uint256 amount) {
+            return amount;
+        } catch {
+            return 1000 * 10**6; // 1000 USDC par défaut
+        }
+    }
     
     function run() external view {
         uint256 currentChainId = block.chainid;
@@ -269,19 +295,22 @@ contract TestFetcher is Script {
         console.log("Wallet Balance:", balance);
         
         // Test structured fetch
+        uint256 testUsdcAmount = getTestUsdcAmount();
         USDCBalanceFetcher.BalanceData memory balanceData = fetcher.fetchUSDCBalanceWithThreshold(
             testWallet, 
-            testThreshold
+            testThreshold,
+            testUsdcAmount
         );
         
         console.log("Structured Data:");
         console.log("  - Balance:", balanceData.balance);
         console.log("  - Threshold:", balanceData.minThreshold);
+        console.log("  - USDC Amount:", balanceData.usdcAmount);
         
         if (balanceData.balance == balance && balanceData.minThreshold == testThreshold) {
-            console.log("✅ All tests passed");
+            console.log("All tests passed");
         } else {
-            console.log("❌ Data consistency issues detected");
+            console.log("Data consistency issues detected");
         }
     }
 }
@@ -334,7 +363,7 @@ contract FetcherUtilities is Script {
             
             console.log("Expected USDC:", expectedUSDC);
             console.log("Actual USDC:", actualUSDC);
-            console.log("Status:", expectedUSDC == actualUSDC ? "✅ OK" : "❌ Mismatch");
+            console.log("Status:", expectedUSDC == actualUSDC ? "OK" : "Mismatch");
         } catch {
             console.log("Sepolia fetcher not found or invalid");
         }
@@ -350,7 +379,7 @@ contract FetcherUtilities is Script {
             
             console.log("Expected USDC:", expectedUSDC);
             console.log("Actual USDC:", actualUSDC);
-            console.log("Status:", expectedUSDC == actualUSDC ? "✅ OK" : "❌ Mismatch");
+            console.log("Status:", expectedUSDC == actualUSDC ? "OK" : "Mismatch");
         } catch {
             console.log("Fuji fetcher not found or invalid");
         }
