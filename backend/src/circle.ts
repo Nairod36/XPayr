@@ -70,11 +70,18 @@ export class CircleService {
     );
     // ethers v6 : utiliser getAddress + arrayify + zeroPadBytes
     const recipientBytes32 = ethers.zeroPadBytes(ethers.getAddress(mintRecipientAddress), 32);
+    const ZERO32    = ethers.ZeroHash;
+    const MAX_FEE   = ethers.parseUnits('0.01', usdcDecimals);
+    const MIN_FINAL = 1000;
+
     const burnTx = await messenger.depositForBurn(
-      amountUnits,
-      destinationDomainId,
-      recipientBytes32,
-      burnTokenAddress
+    amountUnits,
+    destinationDomainId,
+    recipientBytes32,
+    burnTokenAddress,
+    ZERO32,
+    MAX_FEE,
+    MIN_FINAL
     );
     const receipt = await burnTx.wait();
 
