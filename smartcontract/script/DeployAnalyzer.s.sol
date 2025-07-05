@@ -5,6 +5,7 @@ import { Script, console } from "forge-std/Script.sol";
 import { GenericUSDCAnalyzer } from "../src/GenericUSDCAnalyzer.sol";
 import { USDCBalanceFetcher } from "../src/USDCBalanceFetcher.sol";
 import { MessagingReceipt } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
+import { OptionsBuilder } from "@layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
 
 /**
  * @title DeployAnalyzer
@@ -57,11 +58,11 @@ contract DeployAnalyzer is Script {
             name: "Sepolia"
         }));
         
-        // Fuji
+        // Base Sepolia
         chains.push(ChainSetup({
-            lzEid: 40106,
-            fetcherAddress: vm.envAddress("FETCHER_FUJI_ADDRESS"),
-            name: "Fuji"
+            lzEid: 40245,
+            fetcherAddress: vm.envAddress("FETCHER_BASE_ADDRESS"),
+            name: "Base"
         }));
         
         console.log("=== Chain Configuration ===");
@@ -179,15 +180,18 @@ contract DeployAnalyzer is Script {
  * @notice Script pour tester l'intégration complète LayerZero
  */
 contract TestAnalyzerIntegration is Script {
+
+    using OptionsBuilder for bytes;
     
     /**
      * @notice Crée les options LayerZero appropriées pour les requêtes cross-chain
      * @return extraOptions Options encodées pour LayerZero V2
      */
-    function createLayerZeroOptions() internal pure returns (bytes memory extraOptions) {
-        // Pour lzRead, les options vides sont souvent suffisantes
-        // Le problème peut venir d'ailleurs (configuration DVN, peers, etc.)
-        return abi.encodePacked(uint16(3));
+    function createLayerZeroOptions() internal pure returns (bytes memory) {
+        // Pour lzRead, essayer d'abord avec des options minimalistes
+        return OptionsBuilder
+            .newOptions()
+            .addExecutorLzReceiveOption(150_000, 0); // Gas limit plus conservateur
     }
     
     function run() external {
@@ -199,19 +203,33 @@ contract TestAnalyzerIntegration is Script {
         console.log("=== Testing LayerZero Integration ===");
         console.log("Analyzer Address:", analyzerAddress);
         
+        // Vérifier la configuration de l'analyzer
+        GenericUSDCAnalyzer analyzer = GenericUSDCAnalyzer(analyzerAddress);
+        uint32 currentReadChannel = analyzer.READ_CHANNEL();
+        console.log("Analyzer READ_CHANNEL:", currentReadChannel);
+        
+        if (currentReadChannel != 4294967295) {
+            console.log("WARNING: Analyzer READ_CHANNEL is not 4294967295!");
+            console.log("This analyzer was deployed with wrong READ_CHANNEL.");
+            console.log("You may need to redeploy the analyzer with correct configuration.");
+        }
+        
         // Configuration des wallets et seuils de test
-        address[] memory merchantWallets = new address[](2);
-        uint32[] memory targetEids = new uint32[](2);
-        uint256[] memory minThresholds = new uint256[](2);
+        // address[] memory merchantWallets = new address[](2);
+        // uint32[] memory targetEids = new uint32[](2);
+        // uint256[] memory minThresholds = new uint256[](2);
+        address[] memory merchantWallets = new address[](1);
+        uint32[] memory targetEids = new uint32[](1);
+        uint256[] memory minThresholds = new uint256[](1);
         
         merchantWallets[0] = vm.envAddress("SEPOLIA_TEST_WALLET");
-        merchantWallets[1] = vm.envAddress("FUJI_TEST_WALLET");
+        // merchantWallets[1] = vm.envAddress("BASE_TEST_WALLET");
         
         targetEids[0] = 40161; // Sepolia EID
-        targetEids[1] = 40106; // Fuji EID
+        // targetEids[1] = 40245; // Base EID
         
         minThresholds[0] = vm.envUint("MIN_THRESHOLD_SEPOLIA");
-        minThresholds[1] = vm.envUint("MIN_THRESHOLD_FUJI");
+        // minThresholds[1] = vm.envUint("MIN_THRESHOLD_BASE");
         
         // Montant USDC à distribuer (depuis .env ou valeur par défaut)
         uint256 usdcAmount;
@@ -223,11 +241,11 @@ contract TestAnalyzerIntegration is Script {
         
         console.log("Test Configuration:");
         console.log("  Sepolia wallet:", merchantWallets[0], "threshold:", minThresholds[0]);
-        console.log("  Fuji wallet:", merchantWallets[1], "threshold:", minThresholds[1]);
+        // console.log("  Base wallet:", merchantWallets[1], "threshold:", minThresholds[1]);
         console.log("  USDC amount to distribute:", usdcAmount);
         
         // Estimation des frais
-        uint256 estimatedFee = 0.02 ether; // Estimation conservatrice
+        uint256 estimatedFee = 0.5 ether; // Estimation conservatrice
         console.log("Estimated fee:", estimatedFee);
         
         require(address(this).balance >= estimatedFee, "Insufficient ETH for LayerZero fees");
@@ -236,8 +254,6 @@ contract TestAnalyzerIntegration is Script {
         bytes memory extraOptions = createLayerZeroOptions();
         
         vm.startBroadcast();
-        
-        GenericUSDCAnalyzer analyzer = GenericUSDCAnalyzer(analyzerAddress);
         
         try analyzer.analyzeBalances{value: estimatedFee}(
             merchantWallets,
@@ -300,12 +316,12 @@ contract AnalyzerUtilities is Script {
         
         // Check fetchers
         address sepoliaFetcher = vm.envAddress("FETCHER_SEPOLIA_ADDRESS");
-        address fujiFetcher = vm.envAddress("FETCHER_FUJI_ADDRESS");
+        address baseFetcher = vm.envAddress("FETCHER_BASE_ADDRESS");
         address analyzer = vm.envAddress("ANALYZER_SEPOLIA_ADDRESS");
         
         console.log("Deployment Status:");
         console.log("- Sepolia fetcher:", sepoliaFetcher != address(0) ? "Deployed" : "Missing");
-        console.log("- Fuji fetcher:", fujiFetcher != address(0) ? "Deployed" : "Missing");
+        console.log("- Base fetcher:", baseFetcher != address(0) ? "Deployed" : "Missing");
         console.log("- Analyzer:", analyzer != address(0) ? "Deployed" : "Missing");
         
         if (analyzer != address(0)) {
@@ -318,20 +334,20 @@ contract AnalyzerUtilities is Script {
             
             // Check mappings
             address mappedSepolia = analyzerContract.fetcherByChain(40161);
-            address mappedFuji = analyzerContract.fetcherByChain(40106);
+            address mappedBase = analyzerContract.fetcherByChain(40245);
             
             console.log("Fetcher Mappings:");
             console.log("- Sepolia (40161):", mappedSepolia);
-            console.log("- Fuji (40106):", mappedFuji);
+            console.log("- Base (40245):", mappedBase);
             
             bool sepoliaOK = mappedSepolia == sepoliaFetcher;
-            bool fujiOK = mappedFuji == fujiFetcher;
+            bool baseOK = mappedBase == baseFetcher;
             
             console.log("Mapping Verification:");
             console.log("- Sepolia:", sepoliaOK ? "Correct" : "Incorrect");
-            console.log("- Fuji:", fujiOK ? "Correct" : "Incorrect");
+            console.log("- Base:", baseOK ? "Correct" : "Incorrect");
             
-            if (sepoliaOK && fujiOK) {
+            if (sepoliaOK && baseOK) {
                 console.log("");
                 console.log("Complete setup verified!");
                 console.log("Ready for cross-chain testing");
@@ -360,9 +376,9 @@ contract AnalyzerUtilities is Script {
         console.log("");
         console.log("Test Wallet Configuration:");
         console.log("- Sepolia wallet:", vm.envAddress("SEPOLIA_TEST_WALLET"));
-        console.log("- Fuji wallet:", vm.envAddress("FUJI_TEST_WALLET"));
+        console.log("- Base wallet:", vm.envAddress("BASE_TEST_WALLET"));
         console.log("- Sepolia threshold:", vm.envUint("MIN_THRESHOLD_SEPOLIA"));
-        console.log("- Fuji threshold:", vm.envUint("MIN_THRESHOLD_FUJI"));
+        console.log("- Base threshold:", vm.envUint("MIN_THRESHOLD_BASE"));
     }
     
     function estimateFees() internal view {

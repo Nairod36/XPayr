@@ -36,12 +36,12 @@ contract DeployFetchers is Script {
             chainId: 11155111
         });
 
-        chainConfigs["fuji"] = ChainConfig({
-            name: "Fuji",
-            lzEid: 40106,
+        chainConfigs["base"] = ChainConfig({
+            name: "Base",
+            lzEid: 40245,
             lzEndpoint: 0x6EDCE65403992e310A62460808c4b910D972f10f,
-            usdcAddress: vm.envAddress("FUJI_USDC_ADDRESS"),
-            chainId: 43113
+            usdcAddress: vm.envAddress("BASE_USDC_ADDRESS"),
+            chainId: 84532
         });
     }
 
@@ -60,9 +60,9 @@ contract DeployFetchers is Script {
         if (currentChainId == 11155111) {  // Sepolia
             config = chainConfigs["sepolia"];
             chainName = "sepolia";
-        } else if (currentChainId == 43113) {  // Fuji
-            config = chainConfigs["fuji"];
-            chainName = "fuji";
+        } else if (currentChainId == 84532) {  // Base Sepolia
+            config = chainConfigs["base"];
+            chainName = "base";
         } else {
             revert("Unsupported chain ID");
         }
@@ -159,11 +159,11 @@ contract DeployFetchers is Script {
                 console.log("SEPOLIA_TEST_WALLET not configured");
                 return address(0);
             }
-        } else if (keccak256(bytes(chainName)) == keccak256(bytes("fuji"))) {
-            try vm.envAddress("FUJI_TEST_WALLET") returns (address wallet) {
+        } else if (keccak256(bytes(chainName)) == keccak256(bytes("base"))) {
+            try vm.envAddress("BASE_TEST_WALLET") returns (address wallet) {
                 return wallet;
             } catch {
-                console.log("FUJI_TEST_WALLET not configured");
+                console.log("BASE_TEST_WALLET not configured");
                 return address(0);
             }
         }
@@ -182,8 +182,8 @@ contract DeployFetchers is Script {
             } catch {
                 return 100 * 10**6; // 100 USDC par défaut
             }
-        } else if (keccak256(bytes(chainName)) == keccak256(bytes("fuji"))) {
-            try vm.envUint("MIN_THRESHOLD_FUJI") returns (uint256 t) {
+        } else if (keccak256(bytes(chainName)) == keccak256(bytes("base"))) {
+            try vm.envUint("MIN_THRESHOLD_BASE") returns (uint256 t) {
                 return t;
             } catch {
                 return 200 * 10**6; // 200 USDC par défaut
@@ -220,8 +220,8 @@ contract DeployFetchers is Script {
         console.log("=== Add to .env file ===");
         if (keccak256(bytes(chainName)) == keccak256(bytes("sepolia"))) {
             console.log("FETCHER_SEPOLIA_ADDRESS=", deployedFetcher);
-        } else if (keccak256(bytes(chainName)) == keccak256(bytes("fuji"))) {
-            console.log("FETCHER_FUJI_ADDRESS=", deployedFetcher);
+        } else if (keccak256(bytes(chainName)) == keccak256(bytes("base"))) {
+            console.log("FETCHER_BASE_ADDRESS=", deployedFetcher);
         }
         console.log("");
         
@@ -267,11 +267,11 @@ contract TestFetcher is Script {
             testWallet = vm.envAddress("SEPOLIA_TEST_WALLET");
             testThreshold = vm.envUint("MIN_THRESHOLD_SEPOLIA");
             chainName = "Sepolia";
-        } else if (currentChainId == 43113) {  // Fuji
-            fetcherAddress = vm.envAddress("FETCHER_FUJI_ADDRESS");
-            testWallet = vm.envAddress("FUJI_TEST_WALLET");
-            testThreshold = vm.envUint("MIN_THRESHOLD_FUJI");
-            chainName = "Fuji";
+        } else if (currentChainId == 84532) {  // Base Sepolia
+            fetcherAddress = vm.envAddress("FETCHER_BASE_ADDRESS");
+            testWallet = vm.envAddress("BASE_TEST_WALLET");
+            testThreshold = vm.envUint("MIN_THRESHOLD_BASE");
+            chainName = "Base";
         } else {
             revert("Unsupported chain ID");
         }
@@ -344,10 +344,10 @@ contract FetcherUtilities is Script {
             console.log("Sepolia: Not deployed");
         }
         
-        try vm.envAddress("FETCHER_FUJI_ADDRESS") returns (address fuji) {
-            console.log("Fuji:", fuji);
+        try vm.envAddress("FETCHER_BASE_ADDRESS") returns (address base) {
+            console.log("Base:", base);
         } catch {
-            console.log("Fuji: Not deployed");
+            console.log("Base: Not deployed");
         }
     }
     
@@ -370,18 +370,18 @@ contract FetcherUtilities is Script {
         
         console.log("");
         
-        // Check Fuji
-        try vm.envAddress("FETCHER_FUJI_ADDRESS") returns (address fujiFetcher) {
-            console.log("Checking Fuji fetcher...");
-            USDCBalanceFetcher fetcher = USDCBalanceFetcher(fujiFetcher);
-            address expectedUSDC = vm.envAddress("FUJI_USDC_ADDRESS");
+        // Check Base
+        try vm.envAddress("FETCHER_BASE_ADDRESS") returns (address baseFetcher) {
+            console.log("Checking Base fetcher...");
+            USDCBalanceFetcher fetcher = USDCBalanceFetcher(baseFetcher);
+            address expectedUSDC = vm.envAddress("BASE_USDC_ADDRESS");
             address actualUSDC = fetcher.getUSDCAddress();
             
             console.log("Expected USDC:", expectedUSDC);
             console.log("Actual USDC:", actualUSDC);
             console.log("Status:", expectedUSDC == actualUSDC ? "OK" : "Mismatch");
         } catch {
-            console.log("Fuji fetcher not found or invalid");
+            console.log("Base fetcher not found or invalid");
         }
     }
 }
