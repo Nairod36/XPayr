@@ -4,7 +4,16 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon src/index.ts"
+    "test:cctp": "ts-node src/scripts/test-cctp.ts",
+    "test:real-cctp": "ts-node src/scripts/test-real-cctp.ts",
+    "test:config": "ts-node src/scripts/test-config.ts",
+    "check:balances": "ts-node src/scripts/check-balances.ts",
+    "setup:circle-wallets": "ts-node src/scripts/setup-circle-wallets.ts",
+    "dev": "nodemon src/index.ts",
+    "start": "ts-node src/index.ts",
+    "build": "tsc",
+    "lint": "tslint --project .",
+    "format": "prettier --write src/**/*.ts"
   },
   "repository": {
     "type": "git",
