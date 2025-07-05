@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import { Script, console } from "forge-std/Script.sol";
 import { GenericUSDCAnalyzer } from "../src/GenericUSDCAnalyzer.sol";
 import { USDCBalanceFetcher } from "../src/USDCBalanceFetcher.sol";
-import { MessagingReceipt } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
+import { MessagingReceipt, MessagingFee } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
 import { OptionsBuilder } from "@layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
 
 /**
@@ -244,14 +244,68 @@ contract TestAnalyzerIntegration is Script {
         // console.log("  Base wallet:", merchantWallets[1], "threshold:", minThresholds[1]);
         console.log("  USDC amount to distribute:", usdcAmount);
         
-        // Estimation des frais
-        uint256 estimatedFee = 0.5 ether; // Estimation conservatrice
-        console.log("Estimated fee:", estimatedFee);
-        
-        require(address(this).balance >= estimatedFee, "Insufficient ETH for LayerZero fees");
-        
         // Création des options LayerZero appropriées
         bytes memory extraOptions = createLayerZeroOptions();
+        
+        // Vérifications préalables avant l'estimation des frais
+        console.log("Pre-flight checks...");
+        
+        // Vérifier que les fetchers sont configurés correctement
+        for (uint i = 0; i < targetEids.length; i++) {
+            address fetcherAddress = analyzer.fetcherByChain(targetEids[i]);
+            console.log("Chain EID:", targetEids[i], "Fetcher:", fetcherAddress);
+            if (fetcherAddress == address(0)) {
+                console.log("ERROR: No fetcher configured for EID", targetEids[i]);
+                return;
+            }
+        }
+        
+        // Vérification des paramètres
+        console.log("Parameter validation:");
+        console.log("  Wallets length:", merchantWallets.length);
+        console.log("  EIDs length:", targetEids.length);
+        console.log("  Thresholds length:", minThresholds.length);
+        console.log("  USDC amount:", usdcAmount);
+        console.log("  Options length:", extraOptions.length);
+        
+        // Estimation précise des frais avec quoteReadFee
+        console.log("Estimating LayerZero fees...");
+        uint256 estimatedFee;
+        bool feeEstimationSucceeded = false;
+        
+        try analyzer.quoteReadFee(
+            merchantWallets,
+            targetEids,
+            minThresholds,
+            usdcAmount,
+            extraOptions
+        ) returns (MessagingFee memory fee) {
+            estimatedFee = fee.nativeFee;
+            console.log("Estimated fee (precise):", estimatedFee);
+            
+            // Ajouter une marge de sécurité de 20%
+            uint256 feeWithMargin = estimatedFee + (estimatedFee * 20 / 100);
+            estimatedFee = feeWithMargin;
+            console.log("Estimated fee (with 20% margin):", estimatedFee);
+            feeEstimationSucceeded = true;
+        } catch Error(string memory reason) {
+            console.log("Fee estimation failed with reason:", reason);
+        } catch (bytes memory lowLevelData) {
+            console.log("Fee estimation failed with low-level error");
+            console.log("Error data length:", lowLevelData.length);
+            if (lowLevelData.length > 0) {
+                console.logBytes(lowLevelData);
+            }
+        }
+        
+        if (!feeEstimationSucceeded) {
+            console.log("Using fallback estimation...");
+            estimatedFee = 0.02 ether; // Fallback plus conservateur
+            console.log("Estimated fee (fallback):", estimatedFee);
+            console.log("NOTE: Proceeding with fallback fee - this is normal for some LayerZero configurations");
+        }
+        
+        require(address(this).balance >= estimatedFee, "Insufficient ETH for LayerZero fees");
         
         vm.startBroadcast();
         
@@ -293,6 +347,8 @@ contract TestAnalyzerIntegration is Script {
  * @notice Utilitaires pour la gestion de l'analyzer
  */
 contract AnalyzerUtilities is Script {
+
+    using OptionsBuilder for bytes; 
     
     function run() external {
         string memory action = vm.envString("ANALYZER_ACTION");
@@ -383,17 +439,58 @@ contract AnalyzerUtilities is Script {
     
     function estimateFees() internal view {
         console.log("=== LayerZero Fee Estimation ===");
-        console.log("Cross-chain read operations typically cost:");
-        console.log("- Base fee per chain: ~0.003-0.008 ETH");
-        console.log("- For 2 chains: ~0.006-0.016 ETH");
-        console.log("- Recommended: 0.02 ETH for safety margin");
+        
+        address analyzerAddress = vm.envAddress("ANALYZER_SEPOLIA_ADDRESS");
+        if (analyzerAddress == address(0)) {
+            console.log("Analyzer not deployed - showing general estimates");
+            console.log("Cross-chain read operations typically cost:");
+            console.log("- Base fee per chain: ~0.003-0.008 ETH");
+            console.log("- For 2 chains: ~0.006-0.016 ETH");
+            console.log("- Recommended: 0.02 ETH for safety margin");
+            return;
+        }
+        
+        GenericUSDCAnalyzer analyzer = GenericUSDCAnalyzer(analyzerAddress);
+        
+        // Configuration de test pour l'estimation
+        address[] memory merchantWallets = new address[](2);
+        uint32[] memory targetEids = new uint32[](2);
+        uint256[] memory minThresholds = new uint256[](2);
+        
+        merchantWallets[0] = vm.envAddress("SEPOLIA_TEST_WALLET");
+        merchantWallets[1] = vm.envAddress("BASE_TEST_WALLET");
+        targetEids[0] = 40161; // Sepolia EID
+        targetEids[1] = 40245; // Base EID
+        minThresholds[0] = vm.envUint("MIN_THRESHOLD_SEPOLIA");
+        minThresholds[1] = vm.envUint("MIN_THRESHOLD_BASE");
+        
+        uint256 usdcAmount = 1000 * 10**6; // 1000 USDC
+        bytes memory extraOptions = OptionsBuilder
+            .newOptions()
+            .addExecutorLzReceiveOption(150_000, 0);
+        
+        console.log("Estimating fees for 2-chain analysis...");
+        
+        try analyzer.quoteReadFee(
+            merchantWallets,
+            targetEids,
+            minThresholds,
+            usdcAmount,
+            extraOptions
+        ) returns (MessagingFee memory fee) {
+            console.log("Base fee estimate:", fee.nativeFee);
+            console.log("With 20% margin:", fee.nativeFee + (fee.nativeFee * 20 / 100));
+            console.log("With 50% margin:", fee.nativeFee + (fee.nativeFee * 50 / 100));
+        } catch {
+            console.log("Could not get precise estimate - using fallback");
+            console.log("Recommended: 0.02 ETH for 2-chain analysis");
+        }
+        
         console.log("");
         console.log("Factors affecting fees:");
         console.log("- Network congestion");
         console.log("- Gas prices on source/destination chains");
         console.log("- LayerZero oracle fees");
         console.log("- Message size (our messages are small)");
-        console.log("");
-        console.log("Use 0.02 ETH for testing, adjust based on actual usage");
     }
 }

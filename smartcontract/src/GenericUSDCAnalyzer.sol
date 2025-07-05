@@ -85,6 +85,33 @@ contract GenericUSDCAnalyzer is OAppRead, IOAppMapper, IOAppReducer, OAppOptions
             "Length mismatch"
         );
 
+        // Build the command for LayerZero read+compute request
+        bytes memory cmd = _getCmd(merchantWallets, targetEids, minThresholds, _usdcAmount);
+
+        // Send the read+compute request
+        return _lzSend(
+            READ_CHANNEL,
+            cmd,
+            combineOptions(READ_CHANNEL, READ_TYPE, _extraOptions),
+            MessagingFee(msg.value, 0),
+            payable(msg.sender)
+        );
+    }
+
+    /**
+     * @notice Builds the LayerZero command for cross-chain read requests
+     * @param merchantWallets Wallets to check balances for (1 per chain)
+     * @param targetEids Corresponding LayerZero chain IDs
+     * @param minThresholds Minimum USDC balance desired for each wallet
+     * @param _usdcAmount Amount of USDC to distribute across chains
+     * @return cmd Encoded command ready for LayerZero
+     */
+    function _getCmd(
+        address[] calldata merchantWallets,
+        uint32[] calldata targetEids,
+        uint256[] calldata minThresholds,
+        uint256 _usdcAmount
+    ) internal view returns (bytes memory cmd) {
         // Build read requests per chain
         EVMCallRequestV1[] memory requests = new EVMCallRequestV1[](merchantWallets.length);
 
@@ -111,7 +138,6 @@ contract GenericUSDCAnalyzer is OAppRead, IOAppMapper, IOAppReducer, OAppOptions
             });
         }
 
-
         // Build compute configuration (will execute lzMap/lzReduce)
         EVMCallComputeV1 memory computeRequest = EVMCallComputeV1({
             computeSetting: 2,
@@ -123,20 +149,44 @@ contract GenericUSDCAnalyzer is OAppRead, IOAppMapper, IOAppReducer, OAppOptions
         });
 
         // Encode the USDC amount in the command for use in lzReduce
-        bytes memory cmd = ReadCodecV1.encode(
+        cmd = ReadCodecV1.encode(
             0, // Pass USDC amount as metadata
             requests, 
             computeRequest
         );
+    }
 
-        // Send the read+compute request
-        return _lzSend(
-            READ_CHANNEL,
-            cmd,
-            combineOptions(READ_CHANNEL, READ_TYPE, _extraOptions),
-            MessagingFee(msg.value, 0),
-            payable(msg.sender)
+    /**
+     * @notice Estimates the messaging fee required to perform the read operation.
+     *
+     * @param merchantWallets Wallets to check balances for (1 per chain)
+     * @param targetEids Corresponding LayerZero chain IDs
+     * @param minThresholds Minimum USDC balance desired for each wallet
+     * @param _usdcAmount Amount of USDC to distribute across chains
+     * @param _extraOptions Additional messaging options.
+     *
+     * @return fee The estimated messaging fee.
+     */
+    function quoteReadFee(
+        address[] calldata merchantWallets,
+        uint32[] calldata targetEids,
+        uint256[] calldata minThresholds,
+        uint256 _usdcAmount,
+        bytes calldata _extraOptions
+    ) external view returns (MessagingFee memory fee) {
+        require(
+            merchantWallets.length == targetEids.length &&
+            targetEids.length == minThresholds.length,
+            "Length mismatch"
         );
+
+        return
+            _quote(
+                READ_CHANNEL,
+                _getCmd(merchantWallets, targetEids, minThresholds, _usdcAmount),
+                combineOptions(READ_CHANNEL, READ_TYPE, _extraOptions),
+                false
+            );
     }
 
     /**
