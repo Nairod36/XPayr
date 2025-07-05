@@ -1,9 +1,27 @@
 import { Image } from 'expo-image';
 import { StyleSheet } from 'react-native';
-
 import ParallaxScrollView from '@/components/ParallaxScrollView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { dmk } from "./../dmk";
+ 
+async function connectToDevice() {
+  const subscription = dmk.listenToAvailableDevices({}).subscribe({
+    next: (devices: any) => {
+      // Handle the available devices here
+      console.log("Available devices:", devices);
+    },
+    error: (error: any) => {
+      console.error("Error:", error);
+    },
+    complete: () => {
+      console.log("Completed");
+    },
+  });
+ 
+  // Stop listening to available devices
+  subscription.unsubscribe();
+}
 
 
 export default function HomeScreen() {
@@ -11,12 +29,10 @@ export default function HomeScreen() {
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#23272F', dark: '#181A20' }}
       headerImage={
-        <ThemedView style={styles.logoHeader}>
-          <Image
-            source={require('@/theme/xpayr.png')}
-            style={styles.reactLogo}
-          />
-        </ThemedView>
+        <Image
+          source={require('@/theme/xpayr.png')}
+          style={styles.logoFullWidth}
+        />
       }
     >
       <ThemedView style={styles.titleContainer}>
@@ -30,12 +46,13 @@ export default function HomeScreen() {
           Gérez vos soldes, envoyez, recevez et bridez vos USDC sur plusieurs blockchains avec une expérience inspirée de PayPal/Binance.
         </ThemedText>
       </ThemedView>
-      <ThemedView style={styles.ctaContainer}>
-        <ThemedText type="defaultSemiBold" style={styles.ctaButton}>
-          ➕ Créer une facture
-        </ThemedText>
-        <ThemedText type="defaultSemiBold" style={styles.ctaButton}>
-          💸 Payer une facture
+       <ThemedView style={styles.ctaContainer}>
+       <ThemedText
+          type="defaultSemiBold"
+          style={styles.ctaButton}
+          onPress={connectToDevice}
+        >
+          Connect
         </ThemedText>
       </ThemedView>
       <ThemedView style={styles.infoContainer}>
@@ -48,32 +65,24 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  // scrollContent supprimé car non utilisé
-  logoHeader: {
+  logoFullWidth: {
     width: '100%',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    backgroundColor: 'transparent',
-    paddingTop: 12,
-    paddingBottom: 0,
-    marginBottom: -12,
-  },
-  reactLogo: {
-    width: 140,
-    height: 140,
-    resizeMode: 'contain',
-    borderRadius: 36,
+    height: 250, // auto ?
+    resizeMode: 'cover',
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
     backgroundColor: '#23272F',
     shadowColor: '#000',
     shadowOpacity: 0.10,
     shadowRadius: 12,
     elevation: 8,
+    marginBottom: 0, // Supprime l'espace sous le logo
   },
   titleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: -8,
+    marginTop: -8, // Ajuste pour coller le titre au logo
     marginBottom: 0,
   },
   heroContainer: {
@@ -90,7 +99,7 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   ctaButton: {
-    backgroundColor: '#3772FF',
+    backgroundColor: '#3772FF', // Couleur secondaire du logo
     color: '#fff',
     borderRadius: 24,
     paddingVertical: 14,
