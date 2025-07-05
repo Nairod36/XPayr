@@ -2,6 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import { WalletService } from './wallet';
 import { CHAINS } from './chains';
+import { CircleService, CircleBridgeRequest } from './circle';
 
 // Chargement des variables d'environnement
 dotenv.config();
@@ -14,6 +15,46 @@ app.use(express.json());
 
 // Service de wallet
 const walletService = new WalletService();
+
+
+if (!process.env.CIRCLE_API_KEY) {
+  console.error('Missing CIRCLE_API_KEY');
+  process.exit(1);
+}
+const circleService = new CircleService(process.env.CIRCLE_API_KEY);
+
+app.post('/api/bridge', async (req, res) => {
+  try {
+    const { sourceChain, destinationChain, amount, destinationAddress } = req.body;
+    if (!sourceChain || !destinationChain || !amount || !destinationAddress) {
+      return res.status(400).json({ success: false, error: 'Missing parameters' });
+    }
+    const src = CHAINS[sourceChain];
+    const dst = CHAINS[destinationChain];
+    if (!src || !dst) {
+      return res.status(400).json({ success: false, error: 'Unsupported chain' });
+    }
+    const privateKey = process.env[src.envPrivateKey!];
+    if (!privateKey) {
+      return res.status(500).json({ success: false, error: 'Missing source private key' });
+    }
+    const bridgeReq: CircleBridgeRequest = {
+      sourceRpcUrl: src.rpcUrl,
+      sourcePrivateKey: privateKey,
+      burnTokenAddress: src.usdcAddress,
+      tokenMessengerAddress: src.tokenMessenger,
+      amount,
+      usdcDecimals: src.usdcDecimals,
+      destinationDomainId: dst.domainId,
+      mintRecipientAddress: destinationAddress
+    };
+    const result = await circleService.bridgeUSDC(bridgeReq);
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // 🪙 Route principale
 app.get('/', (req, res) => {
