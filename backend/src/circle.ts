@@ -59,29 +59,21 @@ export class CircleService {
     );
     await approveTx.wait();
 
-    // 2) depositForBurn on TokenMessenger
+    // 2) depositForBurn on TokenMessenger (CCTP v1 interface)
     const messenger = new ethers.Contract(
       tokenMessengerAddress,
       [
         'event MessageSent(uint64 indexed nonce)',
-        'function depositForBurn(uint256,uint32,bytes32,address) external returns (uint64)'
+        'function depositForBurn(uint256 amount, uint32 destinationDomain, bytes32 mintRecipient, address burnToken) external returns (uint64)'
       ],
       wallet
     );
-    // ethers v6 : utiliser getAddress + arrayify + zeroPadBytes
     const recipientBytes32 = ethers.zeroPadBytes(ethers.getAddress(mintRecipientAddress), 32);
-    const ZERO32    = ethers.ZeroHash;
-    const MAX_FEE   = ethers.parseUnits('0.01', usdcDecimals);
-    const MIN_FINAL = 1000;
-
     const burnTx = await messenger.depositForBurn(
-    amountUnits,
-    destinationDomainId,
-    recipientBytes32,
-    burnTokenAddress,
-    ZERO32,
-    MAX_FEE,
-    MIN_FINAL
+      amountUnits,
+      destinationDomainId,
+      recipientBytes32,
+      burnTokenAddress
     );
     const receipt = await burnTx.wait();
 
