@@ -1,0 +1,18 @@
+[submodule "smartcontract/lib/forge-std"]
+	path = smartcontract/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
+[submodule "smartcontract/lib/LayerZero-v2"]
+	path = smartcontract/lib/LayerZero-v2
+	url = https://github.com/LayerZero-Labs/LayerZero-v2
+[submodule "smartcontract/lib/openzeppelin-contracts"]
+	path = smartcontract/lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
+[submodule "smartcontract/lib/devtools"]
+	path = smartcontract/lib/devtools
+	url = https://github.com/LayerZero-Labs/devtools
+[submodule "smartcontract/lib/layerzero-v2"]
+	path = smartcontract/lib/layerzero-v2
+	url = https://github.com/LayerZero-Labs/layerzero-v2
+[submodule "smartcontract/lib/solidity-bytes-utils"]
+	path = smartcontract/lib/solidity-bytes-utils
+	url = https://github.com/GNSPS/solidity-bytes-utils

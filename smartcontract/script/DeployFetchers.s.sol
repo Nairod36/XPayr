@@ -1,0 +1,387 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import { Script, console } from "forge-std/Script.sol";
+import { USDCBalanceFetcher } from "../src/USDCBalanceFetcher.sol";
+
+/**
+ * @title DeployFetchers
+ * @notice Deployment script for USDCBalanceFetcher contracts on all chains
+ * @dev Manages individual deployment of fetchers on each supported chain
+ */
+contract DeployFetchers is Script {
+    
+    // Supported chain configuration
+    struct ChainConfig {
+        string name;
+        uint32 lzEid;           // LayerZero Endpoint ID
+        address lzEndpoint;     // LayerZero Endpoint address
+        address usdcAddress;    // USDC contract address on this chain
+        uint256 chainId;        // Standard Chain ID
+    }
+
+    // Test chain configurations
+    mapping(string => ChainConfig) public chainConfigs;
+    
+    // Deployed addresses
+    address public deployedFetcher;
+
+    function setUp() public {
+        // LayerZero V2 chain configuration (Testnet)
+        chainConfigs["sepolia"] = ChainConfig({
+            name: "Sepolia",
+            lzEid: 40161,
+            lzEndpoint: 0x6EDCE65403992e310A62460808c4b910D972f10f,
+            usdcAddress: vm.envAddress("SEPOLIA_USDC_ADDRESS"),
+            chainId: 11155111
+        });
+
+        chainConfigs["base"] = ChainConfig({
+            name: "Base",
+            lzEid: 40245,
+            lzEndpoint: 0x6EDCE65403992e310A62460808c4b910D972f10f,
+            usdcAddress: vm.envAddress("BASE_USDC_ADDRESS"),
+            chainId: 84532
+        });
+    }
+
+    /**
+     * @notice Main script - deploys fetcher on current chain
+     */
+    function run() public {
+        uint256 currentChainId = block.chainid;
+        
+        console.log("=== Deploying USDCBalanceFetcher ===");
+        console.log("Chain ID:", currentChainId);
+        
+        ChainConfig memory config;
+        string memory chainName;
+        
+        if (currentChainId == 11155111) {  // Sepolia
+            config = chainConfigs["sepolia"];
+            chainName = "sepolia";
+        } else if (currentChainId == 84532) {  // Base Sepolia
+            config = chainConfigs["base"];
+            chainName = "base";
+        } else {
+            revert("Unsupported chain ID");
+        }
+        
+        deployFetcher(chainName, config);
+        testFetcher(chainName, config);
+        saveDeploymentInfo(chainName, config);
+    }
+
+    /**
+     * @notice Deploys a USDCBalanceFetcher on the current chain
+     * @param chainName Chain name
+     * @param config Chain configuration
+     */
+    function deployFetcher(string memory chainName, ChainConfig memory config) internal {
+        console.log("Deploying on", config.name);
+        console.log("USDC Address:", config.usdcAddress);
+        console.log("LayerZero EID:", config.lzEid);
+
+        vm.startBroadcast();
+        
+        USDCBalanceFetcher fetcher = new USDCBalanceFetcher(config.usdcAddress);
+        deployedFetcher = address(fetcher);
+        
+        vm.stopBroadcast();
+
+        console.log("=== Deployment Successful ===");
+        console.log("Fetcher Address:", address(fetcher));
+        console.log("Block Number:", block.number);
+        console.log("Gas Used: Check transaction receipt");
+        console.log("");
+    }
+
+    /**
+     * @notice Tests the deployed fetcher
+     * @param chainName Chain name
+     * @param config Chain configuration
+     */
+    function testFetcher(string memory chainName, ChainConfig memory config) internal view {
+        require(deployedFetcher != address(0), "No fetcher deployed");
+        
+        USDCBalanceFetcher fetcher = USDCBalanceFetcher(deployedFetcher);
+        
+        console.log("=== Testing Deployed Fetcher ===");
+        console.log("Contract Address:", deployedFetcher);
+        
+        // Vérifier la configuration
+        address configuredUSDC = fetcher.getUSDCAddress();
+        console.log("Configured USDC:", configuredUSDC);
+        console.log("Expected USDC:", config.usdcAddress);
+        
+        if (configuredUSDC == config.usdcAddress) {
+            console.log("USDC configuration correct");
+        } else {
+            console.log("USDC configuration mismatch");
+        }
+
+        // Test avec un wallet de test
+        address testWallet = getTestWallet(chainName);
+        if (testWallet != address(0)) {
+            console.log("Testing with wallet:", testWallet);
+            
+            try fetcher.fetchUSDCBalance(testWallet) returns (uint256 balance) {
+                console.log("Wallet balance:", balance);
+                
+                // Test avec threshold
+                uint256 testThreshold = getTestThreshold(chainName);
+                uint256 testUsdcAmount = getTestUsdcAmount();
+                try fetcher.fetchUSDCBalanceWithThreshold(testWallet, testThreshold, testUsdcAmount) returns (USDCBalanceFetcher.BalanceData memory data) {
+                    console.log("Balance with threshold:");
+                    console.log("  - Balance:", data.balance);
+                    console.log("  - Threshold:", data.minThreshold);
+                    console.log("  - USDC Amount:", data.usdcAmount);
+                    console.log("All fetcher functions working");
+                } catch {
+                    console.log("fetchUSDCBalanceWithThreshold failed");
+                }
+            } catch {
+                console.log("fetchUSDCBalance failed - check USDC contract");
+            }
+        }
+    }
+
+    /**
+     * @notice Récupère l'adresse du wallet de test pour une chaîne
+     * @param chainName Nom de la chaîne
+     * @return testWallet Adresse du wallet de test
+     */
+    function getTestWallet(string memory chainName) internal view returns (address testWallet) {
+        if (keccak256(bytes(chainName)) == keccak256(bytes("sepolia"))) {
+            try vm.envAddress("SEPOLIA_TEST_WALLET") returns (address wallet) {
+                return wallet;
+            } catch {
+                console.log("SEPOLIA_TEST_WALLET not configured");
+                return address(0);
+            }
+        } else if (keccak256(bytes(chainName)) == keccak256(bytes("base"))) {
+            try vm.envAddress("BASE_TEST_WALLET") returns (address wallet) {
+                return wallet;
+            } catch {
+                console.log("BASE_TEST_WALLET not configured");
+                return address(0);
+            }
+        }
+        return address(0);
+    }
+
+    /**
+     * @notice Récupère le seuil de test pour une chaîne
+     * @param chainName Nom de la chaîne
+     * @return threshold Seuil de test
+     */
+    function getTestThreshold(string memory chainName) internal view returns (uint256 threshold) {
+        if (keccak256(bytes(chainName)) == keccak256(bytes("sepolia"))) {
+            try vm.envUint("MIN_THRESHOLD_SEPOLIA") returns (uint256 t) {
+                return t;
+            } catch {
+                return 100 * 10**6; // 100 USDC par défaut
+            }
+        } else if (keccak256(bytes(chainName)) == keccak256(bytes("base"))) {
+            try vm.envUint("MIN_THRESHOLD_BASE") returns (uint256 t) {
+                return t;
+            } catch {
+                return 200 * 10**6; // 200 USDC default
+            }
+        }
+        return 100 * 10**6;
+    }
+
+    /**
+     * @notice Gets the test USDC amount
+     * @return usdcAmount USDC amount for testing
+     */
+    function getTestUsdcAmount() internal view returns (uint256 usdcAmount) {
+        try vm.envUint("TEST_USDC_AMOUNT") returns (uint256 amount) {
+            return amount;
+        } catch {
+            return 1000 * 10**6; // 1000 USDC default
+        }
+    }
+
+    /**
+     * @notice Saves deployment information
+     * @param chainName Chain name
+     * @param config Chain configuration
+     */
+    function saveDeploymentInfo(string memory chainName, ChainConfig memory config) internal view {
+        console.log("=== Deployment Summary ===");
+        console.log("Chain:", config.name);
+        console.log("Fetcher Address:", deployedFetcher);
+        console.log("USDC Address:", config.usdcAddress);
+        console.log("LayerZero EID:", config.lzEid);
+        console.log("");
+        
+        console.log("=== Add to .env file ===");
+        if (keccak256(bytes(chainName)) == keccak256(bytes("sepolia"))) {
+            console.log("FETCHER_SEPOLIA_ADDRESS=", deployedFetcher);
+        } else if (keccak256(bytes(chainName)) == keccak256(bytes("base"))) {
+            console.log("FETCHER_BASE_ADDRESS=", deployedFetcher);
+        }
+        console.log("");
+        
+        console.log("=== Next Steps ===");
+        console.log("1. Copy the address above to your .env file");
+        console.log("2. Deploy fetchers on other chains if needed");
+        console.log("3. Deploy the analyzer using DeployAnalyzer.s.sol");
+        console.log("4. Verify the complete setup");
+    }
+}
+
+/**
+ * @title TestFetcher
+ * @notice Script to test an already deployed fetcher
+ */
+contract TestFetcher is Script {
+    
+    /**
+     * @notice Récupère le montant USDC de test
+     * @return usdcAmount Montant USDC pour les tests
+     */
+    function getTestUsdcAmount() internal view returns (uint256 usdcAmount) {
+        try vm.envUint("TEST_USDC_AMOUNT") returns (uint256 amount) {
+            return amount;
+        } catch {
+            return 1000 * 10**6; // 1000 USDC par défaut
+        }
+    }
+    
+    function run() external view {
+        uint256 currentChainId = block.chainid;
+        
+        console.log("=== Testing Existing Fetcher ===");
+        console.log("Chain ID:", currentChainId);
+        
+        address fetcherAddress;
+        address testWallet;
+        uint256 testThreshold;
+        string memory chainName;
+        
+        if (currentChainId == 11155111) {  // Sepolia
+            fetcherAddress = vm.envAddress("FETCHER_SEPOLIA_ADDRESS");
+            testWallet = vm.envAddress("SEPOLIA_TEST_WALLET");
+            testThreshold = vm.envUint("MIN_THRESHOLD_SEPOLIA");
+            chainName = "Sepolia";
+        } else if (currentChainId == 84532) {  // Base Sepolia
+            fetcherAddress = vm.envAddress("FETCHER_BASE_ADDRESS");
+            testWallet = vm.envAddress("BASE_TEST_WALLET");
+            testThreshold = vm.envUint("MIN_THRESHOLD_BASE");
+            chainName = "Base";
+        } else {
+            revert("Unsupported chain ID");
+        }
+        
+        require(fetcherAddress != address(0), "Fetcher not deployed on this chain");
+        
+        USDCBalanceFetcher fetcher = USDCBalanceFetcher(fetcherAddress);
+        
+        console.log("Chain:", chainName);
+        console.log("Fetcher Address:", fetcherAddress);
+        console.log("Test Wallet:", testWallet);
+        console.log("Test Threshold:", testThreshold);
+        console.log("");
+        
+        // Test USDC address
+        address usdcAddress = fetcher.getUSDCAddress();
+        console.log("USDC Contract:", usdcAddress);
+        
+        // Test balance fetch
+        uint256 balance = fetcher.fetchUSDCBalance(testWallet);
+        console.log("Wallet Balance:", balance);
+        
+        // Test structured fetch
+        uint256 testUsdcAmount = getTestUsdcAmount();
+        USDCBalanceFetcher.BalanceData memory balanceData = fetcher.fetchUSDCBalanceWithThreshold(
+            testWallet, 
+            testThreshold,
+            testUsdcAmount
+        );
+        
+        console.log("Structured Data:");
+        console.log("  - Balance:", balanceData.balance);
+        console.log("  - Threshold:", balanceData.minThreshold);
+        console.log("  - USDC Amount:", balanceData.usdcAmount);
+        
+        if (balanceData.balance == balance && balanceData.minThreshold == testThreshold) {
+            console.log("All tests passed");
+        } else {
+            console.log("Data consistency issues detected");
+        }
+    }
+}
+
+/**
+ * @title FetcherUtilities
+ * @notice Utilities for fetcher management
+ */
+contract FetcherUtilities is Script {
+    
+    function run() external {
+        string memory action = vm.envString("FETCHER_ACTION");
+        
+        if (keccak256(bytes(action)) == keccak256(bytes("list-deployed"))) {
+            listDeployedFetchers();
+        } else if (keccak256(bytes(action)) == keccak256(bytes("verify-config"))) {
+            verifyConfiguration();
+        } else {
+            console.log("Available FETCHER_ACTION values:");
+            console.log("- list-deployed: Show all deployed fetchers");
+            console.log("- verify-config: Verify fetcher configurations");
+        }
+    }
+    
+    function listDeployedFetchers() internal view {
+        console.log("=== Deployed Fetchers ===");
+        
+        try vm.envAddress("FETCHER_SEPOLIA_ADDRESS") returns (address sepolia) {
+            console.log("Sepolia:", sepolia);
+        } catch {
+            console.log("Sepolia: Not deployed");
+        }
+        
+        try vm.envAddress("FETCHER_BASE_ADDRESS") returns (address base) {
+            console.log("Base:", base);
+        } catch {
+            console.log("Base: Not deployed");
+        }
+    }
+    
+    function verifyConfiguration() internal view {
+        console.log("=== Verifying Fetcher Configuration ===");
+        
+        // Check Sepolia
+        try vm.envAddress("FETCHER_SEPOLIA_ADDRESS") returns (address sepoliaFetcher) {
+            console.log("Checking Sepolia fetcher...");
+            USDCBalanceFetcher fetcher = USDCBalanceFetcher(sepoliaFetcher);
+            address expectedUSDC = vm.envAddress("SEPOLIA_USDC_ADDRESS");
+            address actualUSDC = fetcher.getUSDCAddress();
+            
+            console.log("Expected USDC:", expectedUSDC);
+            console.log("Actual USDC:", actualUSDC);
+            console.log("Status:", expectedUSDC == actualUSDC ? "OK" : "Mismatch");
+        } catch {
+            console.log("Sepolia fetcher not found or invalid");
+        }
+        
+        console.log("");
+        
+        // Check Base
+        try vm.envAddress("FETCHER_BASE_ADDRESS") returns (address baseFetcher) {
+            console.log("Checking Base fetcher...");
+            USDCBalanceFetcher fetcher = USDCBalanceFetcher(baseFetcher);
+            address expectedUSDC = vm.envAddress("BASE_USDC_ADDRESS");
+            address actualUSDC = fetcher.getUSDCAddress();
+            
+            console.log("Expected USDC:", expectedUSDC);
+            console.log("Actual USDC:", actualUSDC);
+            console.log("Status:", expectedUSDC == actualUSDC ? "OK" : "Mismatch");
+        } catch {
+            console.log("Base fetcher not found or invalid");
+        }
+    }
+}
