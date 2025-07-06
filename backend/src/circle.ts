@@ -14,6 +14,10 @@ export interface CircleBridgeRequest {
   circleApiKey?: string;
 }
 
+/**
+ * Legacy Circle Service for backward compatibility
+ * @deprecated Use CircleService from services/circle.ts instead
+ */
 export class CircleService {
   private apiKey: string;
   private baseUrl: string;
@@ -68,7 +72,7 @@ export class CircleService {
       ],
       wallet
     );
-    const recipientBytes32 = ethers.zeroPadBytes(ethers.getAddress(mintRecipientAddress), 32);
+    const recipientBytes32 = ethers.zeroPadValue(ethers.getAddress(mintRecipientAddress), 32);
     const burnTx = await messenger.depositForBurn(
       amountUnits,
       destinationDomainId,
@@ -77,45 +81,54 @@ export class CircleService {
     );
     const receipt = await burnTx.wait();
 
-    // 3) Extract nonce from MessageSent
-    interface MessageSentEvent {
-      event: string;
-      args?: {
-        nonce: bigint;
-        [key: string]: any;
-      };
-      [key: string]: any;
-    }
+    // 3) Extract nonce from MessageSent event
+    const messageSentEvent = receipt.logs.find((log: any) => {
+      try {
+        const parsed = messenger.interface.parseLog(log);
+        return parsed?.name === 'MessageSent';
+      } catch {
+        return false;
+      }
+    });
 
-    interface TransactionReceiptWithEvents extends ethers.TransactionReceipt {
-      events?: MessageSentEvent[];
-    }
-
-    const typedReceipt = receipt as TransactionReceiptWithEvents;
-    const evt: MessageSentEvent | undefined = typedReceipt.events?.find(
-      (e: MessageSentEvent) => e.event === 'MessageSent'
-    );
-    if (!evt || !evt.args) {
+    if (!messageSentEvent) {
       throw new Error('MessageSent event not found');
     }
-    const nonce = evt.args['nonce'].toString();
 
-    // 4) Poll Circle REST API v2/messages/{nonce}
+    const parsed = messenger.interface.parseLog(messageSentEvent);
+    const nonce = parsed!.args.nonce.toString();
+
+    // 4) Poll Circle REST API v1/messages/{nonce}
     const base = circleApiBaseUrl ?? this.baseUrl;
     const key = circleApiKey ?? this.apiKey;
     let status = '';
     let msgData: any = null;
+    
+    const maxAttempts = 50; // 5 minutes max
+    let attempts = 0;
+    
     do {
-      const resp = await axios.get<{ data: any }>(
-        `${base}/v2/messages/${nonce}`,
-        { headers: { Authorization: `Bearer ${key}` } }
-      );
-      msgData = resp.data.data;
-      status = msgData.status;
-      if (status !== 'COMPLETED') {
-        await new Promise(r => setTimeout(r, 2000));
+      try {
+        const resp = await axios.get(
+          `${base}/v1/messages/${nonce}`,
+          { headers: { Authorization: `Bearer ${key}` } }
+        );
+        msgData = resp.data;
+        status = msgData.status || 'pending';
+        
+        if (status !== 'complete') {
+          await new Promise(r => setTimeout(r, 6000)); // 6 seconds
+        }
+        attempts++;
+      } catch (error) {
+        console.warn(`Attempt ${attempts} failed:`, error);
+        if (attempts >= maxAttempts) {
+          throw new Error(`Failed to get attestation after ${maxAttempts} attempts`);
+        }
+        await new Promise(r => setTimeout(r, 6000));
+        attempts++;
       }
-    } while (status !== 'COMPLETED');
+    } while (status !== 'complete' && attempts < maxAttempts);
 
     return {
       burnTxHash: burnTx.hash,
