@@ -2,15 +2,7 @@
 pragma solidity ^0.8.20;
 
 import { Script, console } from "forge-std/Script.sol";
-import { USDCBalanceFetcher }     /**
-     * @notice Gets    /**
-     * @notice Gets the test threshold for a chain
-     * @param chainName Chain name
-     * @return threshold Test threshold value
-     */test wallet address for a chain
-     * @param chainName Chain name
-     * @return wallet Test wallet address
-     */"../src/USDCBalanceFetcher.sol";
+import { USDCBalanceFetcher } from "../src/USDCBalanceFetcher.sol";
 
 /**
  * @title DeployFetchers
