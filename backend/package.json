@@ -7,6 +7,8 @@
     "test:cctp": "ts-node src/scripts/test-cctp.ts",
     "test:real-cctp": "ts-node src/scripts/test-real-cctp.ts",
     "test:config": "ts-node src/scripts/test-config.ts",
+    "test:circle-bridge": "ts-node src/scripts/test-circle-bridge.ts",
+    "test:circle-bridge-real": "ts-node src/scripts/test-circle-bridge.ts --real",
     "check:balances": "ts-node src/scripts/check-balances.ts",
     "setup:circle-wallets": "ts-node src/scripts/setup-circle-wallets.ts",
     "dev": "nodemon src/index.ts",
@@ -28,6 +30,9 @@
   "homepage": "https://github.com/Nairod36/XPayr#readme",
   "description": "",
   "dependencies": {
+    "@circle-fin/developer-controlled-wallets": "^8.3.0",
+    "@circle-fin/smart-contract-platform": "^8.3.0",
+    "@circle-fin/user-controlled-wallets": "^8.3.0",
     "@types/axios": "^0.9.36",
     "@types/crypto-js": "^4.2.2",
     "@types/mongoose": "^5.11.96",

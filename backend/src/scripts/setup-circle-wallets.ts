@@ -1,8 +1,8 @@
 /**
- * Script de configuration des Circle Developer Controlled Wallets
+ * Script de consultation des Circle Developer Controlled Wallets
  * Usage: npm run setup:circle-wallets
  * 
- * Ce script configure automatiquement vos wallets Circle pour XPayr
+ * Ce script consulte vos wallets Circle existants et affiche leurs balances
  */
 
 import dotenv from 'dotenv';
@@ -12,8 +12,8 @@ import { CircleWalletService } from '../services/circle-wallet';
 import { CCTPChain } from '../types/cctp';
 
 async function main() {
-  console.log('🔧 XPayr Circle Wallet Setup');
-  console.log('============================\n');
+  console.log('� XPayr Circle Wallet Inspector');
+  console.log('================================\n');
 
   // 1. Vérifier la configuration
   console.log('1. Checking configuration...');
@@ -34,10 +34,16 @@ async function main() {
     process.exit(1);
   }
 
+  if (!walletSetId) {
+    console.error('❌ CIRCLE_WALLET_SET_ID not found in .env');
+    console.error('   You need to have an existing wallet set to inspect');
+    process.exit(1);
+  }
+
   console.log('✅ Configuration valid');
   console.log(`   API Key: ${apiKey.substring(0, 10)}...`);
   console.log(`   Base URL: ${baseUrl}`);
-  console.log(`   Wallet Set ID: ${walletSetId || 'Will be created'}`);
+  console.log(`   Wallet Set ID: ${walletSetId}`);
   console.log();
 
   // 2. Initialiser le service
@@ -51,106 +57,131 @@ async function main() {
   });
   console.log('✅ Service initialized\n');
 
-  let currentWalletSetId = walletSetId;
-
-  // 3. Créer un wallet set si nécessaire
-  if (!currentWalletSetId) {
-    console.log('3. Creating Wallet Set...');
-    try {
-      const walletSet = await walletService.createWalletSet('XPayr Wallets');
-      currentWalletSetId = walletSet.id;
-      
-      console.log('✅ Wallet Set created:');
-      console.log(`   ID: ${walletSet.id}`);
-      console.log(`   Name: ${walletSet.name}`);
-      console.log();
-      
-      console.log('💡 Add this to your .env file:');
-      console.log(`   CIRCLE_WALLET_SET_ID=${walletSet.id}`);
-      console.log();
-    } catch (error) {
-      console.error('❌ Failed to create wallet set:', error);
-      process.exit(1);
+  // 3. Récupérer tous les wallets du wallet set
+  console.log('3. Fetching existing wallets...');
+  try {
+    const wallets = await walletService.getWallets();
+    
+    if (wallets.length === 0) {
+      console.log('📭 No wallets found in this wallet set');
+      console.log('   You may need to create wallets first');
+      process.exit(0);
     }
-  } else {
-    console.log('3. Using existing Wallet Set...');
-    console.log(`✅ Wallet Set ID: ${currentWalletSetId}\n`);
-  }
 
-  // 4. Créer/vérifier les wallets pour chaque chaîne
-  console.log('4. Setting up wallets for each blockchain...');
-  const chains = [CCTPChain.ETH, CCTPChain.BASE, CCTPChain.ARB, CCTPChain.POLYGON];
-  const walletAddresses: Record<string, string> = {};
+    console.log(`✅ Found ${wallets.length} wallet(s) in wallet set`);
+    console.log();
 
-  for (const chain of chains) {
-    try {
-      console.log(`   Setting up ${chain}...`);
+    // 4. Afficher les détails et balances de chaque wallet
+    console.log('4. Wallet details and balances:');
+    console.log('===============================\n');
+
+    const walletsByChain: Record<string, any> = {};
+
+    for (const wallet of wallets) {
+      console.log(`📱 Wallet: ${wallet.blockchain}`);
+      console.log(`   ID: ${wallet.id}`);
+      console.log(`   Address: ${wallet.address}`);
+      console.log(`   State: ${wallet.state}`);
+      console.log(`   Type: ${wallet.accountType}`);
+      console.log(`   Created: ${new Date(wallet.createDate).toLocaleString()}`);
+      
+      // Stocker pour le résumé par chaîne
+      walletsByChain[wallet.blockchain] = wallet;
+
+      try {
+        console.log('   💰 Balances:');
+        const balances = await walletService.getWalletBalances(wallet.id);
+        
+        if (balances.length === 0) {
+          console.log('      📭 No token balances');
+        } else {
+          let totalUsdValue = 0;
+          balances.forEach(balance => {
+            const amount = parseFloat(balance.amount);
+            const isUSDC = balance.token.symbol === 'USDC';
+            const displayAmount = isUSDC ? 
+              `${(amount / 1000000).toFixed(6)}` : // USDC has 6 decimals
+              amount.toString();
+            
+            console.log(`      • ${displayAmount} ${balance.token.symbol}${balance.token.isNative ? ' (native)' : ''}`);
+            if (balance.token.tokenAddress) {
+              console.log(`        Contract: ${balance.token.tokenAddress}`);
+            }
+            
+            // Estimer la valeur en USD pour USDC
+            if (isUSDC) {
+              totalUsdValue += amount / 1000000;
+            }
+          });
+          
+          if (totalUsdValue > 0) {
+            console.log(`      💵 Estimated USD value: $${totalUsdValue.toFixed(2)}`);
+          }
+        }
+      } catch (error) {
+        console.log(`      ❌ Error fetching balances: ${error}`);
+      }
+      
+      console.log();
+    }
+
+    // 5. Résumé par chaîne CCTP
+    console.log('5. CCTP Chain Summary:');
+    console.log('======================\n');
+    
+    const chains = [CCTPChain.ETH, CCTPChain.BASE, CCTPChain.ARB, CCTPChain.POLYGON];
+    const availableChains: string[] = [];
+    
+    for (const chain of chains) {
       const blockchain = walletService.mapCCTPChainToBlockchain(chain);
+      const wallet = walletsByChain[blockchain];
       
-      // Vérifier si le wallet existe déjà
-      let wallet = await walletService.getWalletForBlockchain(blockchain);
-      
-      if (!wallet) {
-        // Créer un nouveau wallet
-        console.log(`     Creating new wallet for ${blockchain}...`);
-        wallet = await walletService.createWallet(blockchain, currentWalletSetId);
-      }
-      
-      walletAddresses[chain] = wallet.address;
-      console.log(`     ✅ ${chain} (${blockchain}): ${wallet.address}`);
-      
-    } catch (error) {
-      console.error(`     ❌ Failed to setup wallet for ${chain}:`, error);
-    }
-  }
-  console.log();
-
-  // 5. Vérifier les balances
-  console.log('5. Checking wallet balances...');
-  const wallets = await walletService.getWallets(currentWalletSetId);
-  
-  for (const wallet of wallets) {
-    try {
-      console.log(`   Checking ${wallet.blockchain} (${wallet.address})...`);
-      const balances = await walletService.getWalletBalances(wallet.id);
-      
-      if (balances.length === 0) {
-        console.log(`     📭 No balances found`);
+      if (wallet) {
+        availableChains.push(chain);
+        console.log(`✅ ${chain} (${blockchain})`);
+        console.log(`   Address: ${wallet.address}`);
+        
+        // Vérifier le solde USDC spécifiquement
+        try {
+          const balanceCheck = await walletService.checkUSDCBalance(chain, '1'); // Check for 1 USDC minimum
+          console.log(`   USDC Balance: ${(parseFloat(balanceCheck.currentBalance) / 1000000).toFixed(6)} USDC`);
+        } catch (error) {
+          console.log(`   USDC Balance: Unable to check (${error})`);
+        }
       } else {
-        balances.forEach(balance => {
-          console.log(`     💰 ${balance.amount} ${balance.token.symbol}`);
-        });
+        console.log(`❌ ${chain} (${blockchain}) - No wallet found`);
       }
-    } catch (error) {
-      console.log(`     ❌ Error checking balances: ${error}`);
+      console.log();
     }
+
+    // 6. Résumé final
+    console.log('📊 Summary:');
+    console.log('===========\n');
+    console.log(`Total wallets: ${wallets.length}`);
+    console.log(`CCTP-ready chains: ${availableChains.length}/4`);
+    console.log(`Available chains: ${availableChains.join(', ')}`);
+    
+    if (availableChains.length === 4) {
+      console.log('✅ All CCTP chains have wallets - Ready for cross-chain bridging!');
+    } else {
+      console.log('⚠️  Some CCTP chains missing wallets - Limited bridging capability');
+    }
+
+  } catch (error) {
+    console.error('❌ Failed to fetch wallets:', error);
+    process.exit(1);
   }
+
   console.log();
 
-  // 6. Résumé et prochaines étapes
-  console.log('🎉 Circle Wallet Setup Complete!');
-  console.log('=================================\n');
-  
-  console.log('📋 Wallet Addresses:');
-  Object.entries(walletAddresses).forEach(([chain, address]) => {
-    console.log(`   ${chain}: ${address}`);
-  });
-  console.log();
-
-  console.log('📝 Environment Variables:');
-  console.log(`   CIRCLE_API_KEY=${apiKey}`);
-  console.log(`   CIRCLE_ENTITY_SECRET=${entitySecret}`);
-  console.log(`   CIRCLE_BASE_URL=${baseUrl}`);
-  console.log(`   CIRCLE_WALLET_SET_ID=${currentWalletSetId}`);
-  console.log();
-
+  // 7. Prochaines étapes
   console.log('🚀 Next Steps:');
-  console.log('1. Add the wallet addresses to your .env file');
-  console.log('2. Fund your wallets with testnet tokens:');
+  console.log('==============\n');
+  console.log('1. Fund your wallets with testnet tokens if needed:');
   console.log('   - Get testnet USDC: https://faucet.circle.com/');
   console.log('   - Get testnet ETH: https://sepoliafaucet.com/');
-  console.log('3. Test your setup: npm run test:circle-wallets');
-  console.log('4. For production: switch to mainnet API keys and URLs');
+  console.log('2. Test bridge functionality: npm run test:circle-bridge');
+  console.log('3. For production: switch to mainnet API keys and URLs');
   console.log();
 
   console.log('📚 Resources:');
@@ -172,11 +203,11 @@ process.on('uncaughtException', (error) => {
 
 // Run the setup
 main().catch((error) => {
-  console.error('❌ Setup failed:', error);
+  console.error('❌ Wallet inspection failed:', error);
   console.error('\n💡 Common issues:');
   console.error('   - Invalid API key or entity secret');
+  console.error('   - Wallet set ID not found or inaccessible');
   console.error('   - Network connectivity issues');
-  console.error('   - Insufficient permissions for wallet creation');
   console.error('\n🔗 Get help: https://developers.circle.com/developer/support');
   process.exit(1);
 });
