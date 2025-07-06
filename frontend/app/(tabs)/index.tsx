@@ -9,6 +9,7 @@ import { ThemedView } from '@/components/ThemedView';
 export default function HomeScreen() {
 
   return (
+    
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#23272F', dark: '#181A20' }}
       headerImage={
@@ -106,4 +107,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 18,
   },
+  
 });
