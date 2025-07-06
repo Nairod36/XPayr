@@ -9,46 +9,46 @@ import { OptionsBuilder } from "@layerzerolabs/oapp-evm/contracts/oapp/libs/Opti
 
 /**
  * @title DeployAnalyzer
- * @notice Script de déploiement pour le GenericUSDCAnalyzer
- * @dev Doit être exécuté sur Sepolia après le déploiement des fetchers
+ * @notice Deployment script for GenericUSDCAnalyzer
+ * @dev Must be executed on Sepolia after deploying fetchers
  */
 contract DeployAnalyzer is Script {
     
-    // Configuration LayerZero
+    // LayerZero configuration
     struct LayerZeroConfig {
         address endpoint;
         uint32 readChannel;
     }
     
-    // Configuration des chaînes supportées
+    // Supported chain configuration
     struct ChainSetup {
         uint32 lzEid;
         address fetcherAddress;
         string name;
     }
     
-    // Variables de configuration
+    // Configuration variables
     LayerZeroConfig public lzConfig;
     ChainSetup[] public chains;
     
-    // Contrat déployé
+    // Deployed contract
     GenericUSDCAnalyzer public analyzer;
 
     function setUp() public {
         require(block.chainid == 11155111, "Analyzer must be deployed on Sepolia");
         
-        // Configuration LayerZero pour Sepolia
+        // LayerZero configuration for Sepolia
         lzConfig = LayerZeroConfig({
             endpoint: 0x6EDCE65403992e310A62460808c4b910D972f10f,
             readChannel: uint32(vm.envUint("READ_CHANNEL"))
         });
         
-        // Configuration des chaînes et leurs fetchers
+        // Chain configuration and their fetchers
         setupChains();
     }
 
     /**
-     * @notice Configure les chaînes et leurs fetchers
+     * @notice Configures chains and their fetchers
      */
     function setupChains() internal {
         // Sepolia
@@ -76,7 +76,7 @@ contract DeployAnalyzer is Script {
     }
 
     /**
-     * @notice Script principal - déploie l'analyzer
+     * @notice Main script - deploys the analyzer
      */
     function run() public {
         console.log("=== Deploying GenericUSDCAnalyzer on Sepolia ===");
@@ -90,10 +90,10 @@ contract DeployAnalyzer is Script {
     }
 
     /**
-     * @notice Déploie l'analyzer avec la configuration des fetchers
+     * @notice Deploys the analyzer with fetcher configuration
      */
     function deployAnalyzer() internal {
-        // Préparer les paramètres pour le constructeur
+        // Prepare parameters for constructor
         uint32[] memory eids = new uint32[](chains.length);
         address[] memory fetcherAddresses = new address[](chains.length);
         
@@ -121,7 +121,7 @@ contract DeployAnalyzer is Script {
     }
 
     /**
-     * @notice Teste la configuration de l'analyzer
+     * @notice Tests the analyzer configuration
      */
     function testAnalyzer() internal view {
         require(address(analyzer) != address(0), "Analyzer not deployed");
@@ -132,7 +132,7 @@ contract DeployAnalyzer is Script {
         console.log("Read Channel:", analyzer.READ_CHANNEL());
         console.log("Read Type:", analyzer.READ_TYPE());
         
-        // Vérifier les mappings des fetchers
+        // Check fetcher mappings
         console.log("Fetcher Mappings:");
         for (uint i = 0; i < chains.length; i++) {
             address mappedFetcher = analyzer.fetcherByChain(chains[i].lzEid);
@@ -153,7 +153,7 @@ contract DeployAnalyzer is Script {
     }
 
     /**
-     * @notice Sauvegarde les informations de déploiement
+     * @notice Saves deployment information
      */
     function saveDeploymentInfo() internal view {
         console.log("=== Deployment Summary ===");
@@ -177,21 +177,20 @@ contract DeployAnalyzer is Script {
 
 /**
  * @title TestAnalyzerIntegration
- * @notice Script pour tester l'intégration complète LayerZero
+ * @notice Script to test complete LayerZero integration
  */
 contract TestAnalyzerIntegration is Script {
 
     using OptionsBuilder for bytes;
     
     /**
-     * @notice Crée les options LayerZero appropriées pour les requêtes cross-chain
-     * @return extraOptions Options encodées pour LayerZero V2
+     * @notice Creates appropriate LayerZero options for cross-chain requests
+     * @return extraOptions Encoded options for LayerZero V2
      */
-    function createLayerZeroOptions() internal pure returns (bytes memory) {
-        // Pour lzRead, essayer d'abord avec des options minimalistes
+    function createLayerZeroOptions(uint256 size) internal pure returns (bytes memory) {
         return OptionsBuilder
             .newOptions()
-            .addExecutorLzReceiveOption(150_000, 0); // Gas limit plus conservateur
+            .addExecutorLzReadOption(100000, 32 + 32 + 32 * uint32(size), 0.01 ether);
     }
     
     function run() external {
@@ -203,7 +202,7 @@ contract TestAnalyzerIntegration is Script {
         console.log("=== Testing LayerZero Integration ===");
         console.log("Analyzer Address:", analyzerAddress);
         
-        // Vérifier la configuration de l'analyzer
+        // Check analyzer configuration
         GenericUSDCAnalyzer analyzer = GenericUSDCAnalyzer(analyzerAddress);
         uint32 currentReadChannel = analyzer.READ_CHANNEL();
         console.log("Analyzer READ_CHANNEL:", currentReadChannel);
@@ -214,29 +213,29 @@ contract TestAnalyzerIntegration is Script {
             console.log("You may need to redeploy the analyzer with correct configuration.");
         }
         
-        // Configuration des wallets et seuils de test
-        // address[] memory merchantWallets = new address[](2);
-        // uint32[] memory targetEids = new uint32[](2);
-        // uint256[] memory minThresholds = new uint256[](2);
-        address[] memory merchantWallets = new address[](1);
-        uint32[] memory targetEids = new uint32[](1);
-        uint256[] memory minThresholds = new uint256[](1);
+        // Test wallet and threshold configuration
+        address[] memory merchantWallets = new address[](2);
+        uint32[] memory targetEids = new uint32[](2);
+        uint256[] memory minThresholds = new uint256[](2);
+        // address[] memory merchantWallets = new address[](1);
+        // uint32[] memory targetEids = new uint32[](1);
+        // uint256[] memory minThresholds = new uint256[](1);
         
         merchantWallets[0] = vm.envAddress("SEPOLIA_TEST_WALLET");
-        // merchantWallets[1] = vm.envAddress("BASE_TEST_WALLET");
+        merchantWallets[1] = vm.envAddress("BASE_TEST_WALLET");
         
         targetEids[0] = 40161; // Sepolia EID
-        // targetEids[1] = 40245; // Base EID
+        targetEids[1] = 40245; // Base EID
         
         minThresholds[0] = vm.envUint("MIN_THRESHOLD_SEPOLIA");
-        // minThresholds[1] = vm.envUint("MIN_THRESHOLD_BASE");
+        minThresholds[1] = vm.envUint("MIN_THRESHOLD_BASE");
         
-        // Montant USDC à distribuer (depuis .env ou valeur par défaut)
+        // USDC amount to distribute (from .env or default value)
         uint256 usdcAmount;
         try vm.envUint("TEST_USDC_AMOUNT") returns (uint256 amount) {
             usdcAmount = amount;
         } catch {
-            usdcAmount = 1000 * 10**6; // 1000 USDC par défaut
+            usdcAmount = 1000 * 10**6; // 1000 USDC default
         }
         
         console.log("Test Configuration:");
@@ -245,7 +244,7 @@ contract TestAnalyzerIntegration is Script {
         console.log("  USDC amount to distribute:", usdcAmount);
         
         // Création des options LayerZero appropriées
-        bytes memory extraOptions = createLayerZeroOptions();
+        bytes memory extraOptions = createLayerZeroOptions(merchantWallets.length);
         
         // Vérifications préalables avant l'estimation des frais
         console.log("Pre-flight checks...");
@@ -260,19 +259,9 @@ contract TestAnalyzerIntegration is Script {
             }
         }
         
-        // Vérification des paramètres
-        console.log("Parameter validation:");
-        console.log("  Wallets length:", merchantWallets.length);
-        console.log("  EIDs length:", targetEids.length);
-        console.log("  Thresholds length:", minThresholds.length);
-        console.log("  USDC amount:", usdcAmount);
-        console.log("  Options length:", extraOptions.length);
-        
         // Estimation précise des frais avec quoteReadFee
         console.log("Estimating LayerZero fees...");
         uint256 estimatedFee;
-        bool feeEstimationSucceeded = false;
-        
         try analyzer.quoteReadFee(
             merchantWallets,
             targetEids,
@@ -287,22 +276,20 @@ contract TestAnalyzerIntegration is Script {
             uint256 feeWithMargin = estimatedFee + (estimatedFee * 20 / 100);
             estimatedFee = feeWithMargin;
             console.log("Estimated fee (with 20% margin):", estimatedFee);
-            feeEstimationSucceeded = true;
         } catch Error(string memory reason) {
             console.log("Fee estimation failed with reason:", reason);
+            console.log("Using fallback estimation...");
+            estimatedFee = 0.02 ether; // Fallback plus conservateur
+            console.log("Estimated fee (fallback):", estimatedFee);
         } catch (bytes memory lowLevelData) {
             console.log("Fee estimation failed with low-level error");
             console.log("Error data length:", lowLevelData.length);
             if (lowLevelData.length > 0) {
                 console.logBytes(lowLevelData);
             }
-        }
-        
-        if (!feeEstimationSucceeded) {
             console.log("Using fallback estimation...");
-            estimatedFee = 0.02 ether; // Fallback plus conservateur
+            estimatedFee = 0.02 ether;
             console.log("Estimated fee (fallback):", estimatedFee);
-            console.log("NOTE: Proceeding with fallback fee - this is normal for some LayerZero configurations");
         }
         
         require(address(this).balance >= estimatedFee, "Insufficient ETH for LayerZero fees");
@@ -344,7 +331,7 @@ contract TestAnalyzerIntegration is Script {
 
 /**
  * @title AnalyzerUtilities
- * @notice Utilitaires pour la gestion de l'analyzer
+ * @notice Utilities for analyzer management
  */
 contract AnalyzerUtilities is Script {
 

@@ -13,3 +13,6 @@
 [submodule "smartcontract/lib/layerzero-v2"]
 	path = smartcontract/lib/layerzero-v2
 	url = https://github.com/LayerZero-Labs/layerzero-v2
+[submodule "smartcontract/lib/solidity-bytes-utils"]
+	path = smartcontract/lib/solidity-bytes-utils
+	url = https://github.com/GNSPS/solidity-bytes-utils

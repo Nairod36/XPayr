@@ -2,32 +2,40 @@
 pragma solidity ^0.8.20;
 
 import { Script, console } from "forge-std/Script.sol";
-import { USDCBalanceFetcher } from "../src/USDCBalanceFetcher.sol";
+import { USDCBalanceFetcher }     /**
+     * @notice Gets    /**
+     * @notice Gets the test threshold for a chain
+     * @param chainName Chain name
+     * @return threshold Test threshold value
+     */test wallet address for a chain
+     * @param chainName Chain name
+     * @return wallet Test wallet address
+     */"../src/USDCBalanceFetcher.sol";
 
 /**
  * @title DeployFetchers
- * @notice Script de déploiement pour les USDCBalanceFetcher sur toutes les chaînes
- * @dev Gère le déploiement individuel des fetchers sur chaque chaîne supportée
+ * @notice Deployment script for USDCBalanceFetcher contracts on all chains
+ * @dev Manages individual deployment of fetchers on each supported chain
  */
 contract DeployFetchers is Script {
     
-    // Configuration des chaînes supportées
+    // Supported chain configuration
     struct ChainConfig {
         string name;
         uint32 lzEid;           // LayerZero Endpoint ID
-        address lzEndpoint;     // Adresse du LayerZero Endpoint
-        address usdcAddress;    // Adresse du contrat USDC sur cette chaîne
-        uint256 chainId;        // Chain ID standard
+        address lzEndpoint;     // LayerZero Endpoint address
+        address usdcAddress;    // USDC contract address on this chain
+        uint256 chainId;        // Standard Chain ID
     }
 
-    // Configuration des chaînes de test
+    // Test chain configurations
     mapping(string => ChainConfig) public chainConfigs;
     
-    // Adresses déployées
+    // Deployed addresses
     address public deployedFetcher;
 
     function setUp() public {
-        // Configuration des chaînes LayerZero V2 (Testnet)
+        // LayerZero V2 chain configuration (Testnet)
         chainConfigs["sepolia"] = ChainConfig({
             name: "Sepolia",
             lzEid: 40161,
@@ -46,7 +54,7 @@ contract DeployFetchers is Script {
     }
 
     /**
-     * @notice Script principal - déploie le fetcher sur la chaîne actuelle
+     * @notice Main script - deploys fetcher on current chain
      */
     function run() public {
         uint256 currentChainId = block.chainid;
@@ -73,9 +81,9 @@ contract DeployFetchers is Script {
     }
 
     /**
-     * @notice Déploie un USDCBalanceFetcher sur la chaîne actuelle
-     * @param chainName Nom de la chaîne
-     * @param config Configuration de la chaîne
+     * @notice Deploys a USDCBalanceFetcher on the current chain
+     * @param chainName Chain name
+     * @param config Chain configuration
      */
     function deployFetcher(string memory chainName, ChainConfig memory config) internal {
         console.log("Deploying on", config.name);
@@ -97,9 +105,9 @@ contract DeployFetchers is Script {
     }
 
     /**
-     * @notice Teste le fetcher déployé
-     * @param chainName Nom de la chaîne
-     * @param config Configuration de la chaîne
+     * @notice Tests the deployed fetcher
+     * @param chainName Chain name
+     * @param config Chain configuration
      */
     function testFetcher(string memory chainName, ChainConfig memory config) internal view {
         require(deployedFetcher != address(0), "No fetcher deployed");
@@ -186,28 +194,28 @@ contract DeployFetchers is Script {
             try vm.envUint("MIN_THRESHOLD_BASE") returns (uint256 t) {
                 return t;
             } catch {
-                return 200 * 10**6; // 200 USDC par défaut
+                return 200 * 10**6; // 200 USDC default
             }
         }
         return 100 * 10**6;
     }
 
     /**
-     * @notice Récupère le montant USDC de test
-     * @return usdcAmount Montant USDC pour les tests
+     * @notice Gets the test USDC amount
+     * @return usdcAmount USDC amount for testing
      */
     function getTestUsdcAmount() internal view returns (uint256 usdcAmount) {
         try vm.envUint("TEST_USDC_AMOUNT") returns (uint256 amount) {
             return amount;
         } catch {
-            return 1000 * 10**6; // 1000 USDC par défaut
+            return 1000 * 10**6; // 1000 USDC default
         }
     }
 
     /**
-     * @notice Sauvegarde les informations de déploiement
-     * @param chainName Nom de la chaîne
-     * @param config Configuration de la chaîne
+     * @notice Saves deployment information
+     * @param chainName Chain name
+     * @param config Chain configuration
      */
     function saveDeploymentInfo(string memory chainName, ChainConfig memory config) internal view {
         console.log("=== Deployment Summary ===");
@@ -235,7 +243,7 @@ contract DeployFetchers is Script {
 
 /**
  * @title TestFetcher
- * @notice Script pour tester un fetcher déjà déployé
+ * @notice Script to test an already deployed fetcher
  */
 contract TestFetcher is Script {
     
@@ -317,7 +325,7 @@ contract TestFetcher is Script {
 
 /**
  * @title FetcherUtilities
- * @notice Utilitaires pour la gestion des fetchers
+ * @notice Utilities for fetcher management
  */
 contract FetcherUtilities is Script {
     
