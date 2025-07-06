@@ -1,5 +1,5 @@
-import "@walletconnect/react-native-compat";
 import { createContext, ReactNode, useContext, useState } from "react";
+import { useAccount, useConnect, useDisconnect } from "wagmi";
 
 interface WalletContextType {
   isConnected: boolean;
@@ -14,43 +14,28 @@ interface WalletContextType {
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const [isConnected, setIsConnected] = useState(false);
-  const [address, setAddress] = useState<string | null>(null);
-  const [chainId, setChainId] = useState<number | null>(null);
-  const [isConnecting, setIsConnecting] = useState(false);
+  const { address, chainId, isConnected } = useAccount();
+  const { connectAsync, connectors, isPending } = useConnect();
+  const { disconnect } = useDisconnect();
   const [error, setError] = useState<string | null>(null);
 
   const connect = async () => {
     try {
-      setIsConnecting(true);
       setError(null);
-
-      // For demo purposes, simulate wallet connection
-      // In a real app, you would use WalletConnect here
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      const mockAddress = "0x742d35Cc6635C0532925a3b8D6b6C0532e26D1e5";
-      const mockChainId = 1; // Ethereum mainnet
-
-      setAddress(mockAddress);
-      setChainId(mockChainId);
-      setIsConnected(true);
+      const connector = connectors[0];
+      await connectAsync({ connector });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to connect wallet");
-    } finally {
-      setIsConnecting(false);
+      setError(err instanceof Error ? err.message : 'Failed to connect wallet');
     }
   };
 
-  const disconnect = async () => {
+  const disconnectWallet = async () => {
     try {
       setError(null);
-      setAddress(null);
-      setChainId(null);
-      setIsConnected(false);
+      disconnect();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to disconnect wallet"
+        err instanceof Error ? err.message : 'Failed to disconnect wallet'
       );
     }
   };
@@ -60,8 +45,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     address,
     chainId,
     connect,
-    disconnect,
-    isConnecting,
+    disconnect: disconnectWallet,
+    isConnecting: isPending,
     error,
   };
 
