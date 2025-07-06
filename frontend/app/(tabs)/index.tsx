@@ -1,12 +1,13 @@
 import { Image } from 'expo-image';
 import { StyleSheet } from 'react-native';
+import { Link } from 'expo-router';
 
 import ParallaxScrollView from '@/components/ParallaxScrollView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 
-
 export default function HomeScreen() {
+
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#23272F', dark: '#181A20' }}
@@ -31,12 +32,11 @@ export default function HomeScreen() {
         </ThemedText>
       </ThemedView>
       <ThemedView style={styles.ctaContainer}>
-        <ThemedText type="defaultSemiBold" style={styles.ctaButton}>
-          ➕ Créer une facture
-        </ThemedText>
-        <ThemedText type="defaultSemiBold" style={styles.ctaButton}>
-          💸 Payer une facture
-        </ThemedText>
+        <Link href="/CreateInvoice" asChild>
+          <ThemedText type="defaultSemiBold" style={styles.ctaButton}>
+            ➕ Créer une facture
+          </ThemedText>
+        </Link>
       </ThemedView>
       <ThemedView style={styles.infoContainer}>
         <ThemedText style={{ color: '#666', fontSize: 14, textAlign: 'center' }}>
@@ -48,7 +48,6 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  // scrollContent supprimé car non utilisé
   logoHeader: {
     width: '100%',
     alignItems: 'center',
